@@ -55,6 +55,7 @@ var (
 	withIpsec     = flag.Bool("with-ipsec", false, "retrieves ipsec metrics")
 	withLte       = flag.Bool("with-lte", false, "retrieves lte metrics")
 	withNetwatch  = flag.Bool("with-netwatch", false, "retrieves netwatch metrics")
+	withHotSpot   = flag.Bool("with-hotspot", false, "retrieves hotspot metrics")
 
 	cfg *config.Config
 
@@ -272,6 +273,10 @@ func collectorOptions() []collector.Option {
 
 	if *withNetwatch || cfg.Features.Netwatch {
 		opts = append(opts, collector.WithNetwatch())
+	}
+
+	if *withHotSpot || cfg.Features.HotSpot {
+		opts = append(opts, collector.WithHotSpot())
 	}
 
 	if *timeout != collector.DefaultTimeout {

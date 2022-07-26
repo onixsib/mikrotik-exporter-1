@@ -203,6 +203,14 @@ func WithNetwatch() Option {
 	}
 }
 
+
+// WithHotspot enables netwatch metrics
+func WithHotSpot() Option {
+	return func(c *collector) {
+		c.collectors = append(c.collectors, newHotSpotCollector())
+	}
+}
+
 // Option applies options to collector
 type Option func(*collector)
 

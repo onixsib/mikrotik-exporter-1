@@ -1,13 +1,18 @@
 package collector
 
 import (
-	"strconv"
 	"strings"
-
+	"regexp"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/routeros.v2/proto"
 )
+
+func stripRegex(in string) string {
+    reg, _ := regexp.Compile("[^a-zA-Z0-9 ]+")
+    return reg.ReplaceAllString(in, "")
+}
+
 
 type dhcpLeaseCollector struct {
 	props        []string
@@ -15,9 +20,9 @@ type dhcpLeaseCollector struct {
 }
 
 func (c *dhcpLeaseCollector) init() {
-	c.props = []string{"active-mac-address", "server", "status", "expires-after", "active-address", "host-name"}
+	c.props = []string{"active-mac-address", "status", "expires-after", "active-address", "host-name"}
 
-	labelNames := []string{"name", "address", "activemacaddress", "server", "status", "expiresafter", "activeaddress", "hostname"}
+	labelNames := []string{"name", "address", "activemacaddress", "status", "expiresafter", "activeaddress", "hostname"}
 	c.descriptions = description("dhcp", "leases_metrics", "number of metrics", labelNames)
 
 }
@@ -46,7 +51,7 @@ func (c *dhcpLeaseCollector) collect(ctx *collectorContext) error {
 }
 
 func (c *dhcpLeaseCollector) fetch(ctx *collectorContext) ([]*proto.Sentence, error) {
-	reply, err := ctx.client.Run("/ip/dhcp-server/lease/print", "?status=bound", "=.proplist="+strings.Join(c.props, ","))
+	reply, err := ctx.client.Run("/ip/dhcp-server/lease/print", "=.proplist="+strings.Join(c.props, ","))
 	if err != nil {
 		log.WithFields(log.Fields{
 			"device": ctx.device.Name,
@@ -61,31 +66,11 @@ func (c *dhcpLeaseCollector) fetch(ctx *collectorContext) ([]*proto.Sentence, er
 func (c *dhcpLeaseCollector) collectMetric(ctx *collectorContext, re *proto.Sentence) {
 	v := 1.0
 
-	f, err := parseDuration(re.Map["expires-after"])
-	if err != nil {
-		log.WithFields(log.Fields{
-			"device":   ctx.device.Name,
-			"property": "expires-after",
-			"value":    re.Map["expires-after"],
-			"error":    err,
-		}).Error("error parsing duration metric value")
-		return
-	}
-
 	activemacaddress := re.Map["active-mac-address"]
-	server := re.Map["server"]
 	status := re.Map["status"]
+	expiresafter := re.Map["expires-after"]
 	activeaddress := re.Map["active-address"]
-	// QuoteToASCII because of broken DHCP clients
-	hostname := strconv.QuoteToASCII(re.Map["host-name"])
+	hostname := stripRegex(re.Map["host-name"])
 
-	metric, err := prometheus.NewConstMetric(c.descriptions, prometheus.GaugeValue, v, ctx.device.Name, ctx.device.Address, activemacaddress, server, status, strconv.FormatFloat(f, 'f', 0, 64), activeaddress, hostname)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"device": ctx.device.Name,
-			"error":  err,
-		}).Error("error parsing dhcp lease")
-		return
-	}
-	ctx.ch <- metric
+	ctx.ch <- prometheus.MustNewConstMetric(c.descriptions, prometheus.CounterValue, v, ctx.device.Name, ctx.device.Address, activemacaddress, status, expiresafter, activeaddress, hostname)
 }
